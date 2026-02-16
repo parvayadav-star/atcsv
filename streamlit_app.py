@@ -4,6 +4,8 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
+import os
+import glob
 
 # Page configuration
 st.set_page_config(
@@ -18,7 +20,12 @@ st.title("📞 Call Analysis Dashboard")
 # Load data
 @st.cache_data
 def load_data(file):
-    df = pd.read_csv(file)
+    # Handle both file path (string) and uploaded file object
+    if isinstance(file, str):
+        df = pd.read_csv(file)
+    else:
+        df = pd.read_csv(file)
+    
     # Convert duration to numeric if needed
     df['Duration'] = pd.to_numeric(df['Duration'], errors='coerce').fillna(0)
     # Parse time
@@ -46,8 +53,40 @@ def load_data(file):
     
     return df
 
-# File uploader
-uploaded_file = st.file_uploader("Upload your call data CSV", type=['csv'])
+# File handling - check for CSV in data directory first
+@st.cache_data
+def find_latest_csv(directory="/mnt/user-data/uploads"):
+    """Find the most recently modified CSV file in the directory"""
+    import glob
+    import os
+    
+    csv_files = glob.glob(os.path.join(directory, "*.csv"))
+    if not csv_files:
+        return None
+    
+    # Sort by modification time, newest first
+    latest_file = max(csv_files, key=os.path.getmtime)
+    return latest_file
+
+# Try to auto-load latest CSV
+auto_loaded_file = find_latest_csv()
+
+if auto_loaded_file:
+    st.success(f"✅ Auto-loaded: `{os.path.basename(auto_loaded_file)}`")
+    
+    # Option to upload different file
+    with st.expander("📤 Upload a different file"):
+        manual_upload = st.file_uploader("Upload your call data CSV", type=['csv'])
+        if manual_upload is not None:
+            uploaded_file = manual_upload
+            use_auto_file = False
+        else:
+            uploaded_file = auto_loaded_file
+            use_auto_file = True
+else:
+    st.warning("No CSV files found in data directory. Please upload a file.")
+    uploaded_file = st.file_uploader("Upload your call data CSV", type=['csv'])
+    use_auto_file = False
 
 if uploaded_file is not None:
     df = load_data(uploaded_file)
