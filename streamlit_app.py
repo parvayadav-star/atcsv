@@ -182,13 +182,13 @@ if uploaded_file is not None:
         analysis_df = analysis_df.sort_values(by=['Number', 'Time'])
         analysis_df['call_number'] = analysis_df.groupby('Number').cumcount() + 1
         
-        # Build analytics table
+        # Build analytics table - INCLUDING all call statuses
         nth_analytics = (
             analysis_df.groupby('call_number')
             .agg(
                 total_calls=('call_number', 'count'),
                 picked_up=('Call Status', lambda x: (x == 'completed').sum()),
-                goal_met=('Analysis.task_completion', lambda x: x.fillna(False).sum()),
+                goal_met=('Analysis.task_completion', lambda x: (x == True).sum()),  # Only True, not fillna
                 negative_sentiment=('Analysis.user_sentiment', lambda x: (x == 'negative').sum()),
             )
             .reset_index()
@@ -198,6 +198,7 @@ if uploaded_file is not None:
         nth_analytics['Call Pick Rate'] = (nth_analytics['picked_up'] / nth_analytics['total_calls'] * 100).round(1)
         nth_analytics['Goal Success on Picked Calls'] = (
             (nth_analytics['goal_met'] / nth_analytics['picked_up'] * 100)
+            .replace([np.inf, -np.inf], 0)
             .fillna(0)
             .round(1)
         )
@@ -231,7 +232,7 @@ if uploaded_file is not None:
     with tab2:
         st.subheader("Pickup Rate Trend by Call Attempt")
         
-        # Calculate pickup rate by attempt
+        # Calculate pickup rate by attempt - INCLUDING all call statuses
         analysis_df = filtered_df.copy()
         analysis_df = analysis_df.sort_values(by=['Number', 'Time'])
         analysis_df['call_attempt'] = analysis_df.groupby('Number').cumcount() + 1
@@ -239,8 +240,8 @@ if uploaded_file is not None:
         attempt_funnel = (
             analysis_df.groupby('call_attempt')
             .agg(
-                attempts=('Call Status', 'count'),
-                completed=('Call Status', lambda x: (x == 'completed').sum())
+                attempts=('Call Status', 'count'),  # All attempts
+                completed=('Call Status', lambda x: (x == 'completed').sum())  # Only completed
             )
             .reset_index()
         )
@@ -310,12 +311,12 @@ if uploaded_file is not None:
             st.info("📌 All calls included: Every call attempt is counted")
         
         if heatmap_type == "Total Calls vs Completed Calls":
-            # User-level aggregation
+            # User-level aggregation - ALL calls included
             user_summary = (
                 heatmap_df.groupby('Number')
                 .agg(
-                    total_calls=('call_date', 'count'),
-                    completed_calls=('Call Status', lambda x: (x == 'completed').sum())
+                    total_calls=('Number', 'count'),  # All calls
+                    completed_calls=('Call Status', lambda x: (x == 'completed').sum())  # Only completed
                 )
                 .reset_index()
             )
@@ -374,12 +375,12 @@ if uploaded_file is not None:
             st.plotly_chart(fig, use_container_width=True)
         
         else:  # Task Success heatmap
-            # User-level aggregation
+            # User-level aggregation - ALL calls included
             user_summary = (
                 heatmap_df.groupby('Number')
                 .agg(
-                    total_calls=('call_date', 'count'),
-                    task_true_completed=('Analysis.task_completion', lambda x: x.fillna(False).sum())
+                    total_calls=('Number', 'count'),  # All calls
+                    task_true_completed=('Analysis.task_completion', lambda x: (x == True).sum())  # Only True
                 )
                 .reset_index()
             )
@@ -549,7 +550,7 @@ if uploaded_file is not None:
                                     elif metric == 'Could Not Connect':
                                         agg_dict['Could Not Connect'] = ('Call Status', lambda x: (x == 'could_not_connect').sum())
                                     elif metric == 'Task Success Count':
-                                        agg_dict['Task Success'] = ('Analysis.task_completion', lambda x: x.fillna(False).sum())
+                                        agg_dict['Task Success'] = ('Analysis.task_completion', lambda x: (x == True).sum())
                                     elif metric == 'Avg Duration':
                                         agg_dict['Avg Duration (s)'] = ('Duration', 'mean')
                                     elif metric == 'Total Duration':
