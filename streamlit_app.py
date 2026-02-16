@@ -55,7 +55,7 @@ def load_data(file):
 
 # File handling - check for CSV in data directory first
 @st.cache_data
-def find_latest_csv(directory="/mnt/user-data/uploads"):
+def find_latest_csv(directory="/"):
     """Find the most recently modified CSV file in the directory"""
     import glob
     import os
