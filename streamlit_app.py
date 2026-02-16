@@ -134,8 +134,23 @@ if uploaded_file is not None:
     st.sidebar.metric("Filtered Records", f"{len(filtered_df):,}")
     st.sidebar.metric("Excluded", f"{len(df) - len(filtered_df):,}")
     
+    # Warning about filtering
+    if len(selected_statuses) < len(call_statuses):
+        st.sidebar.warning(f"⚠️ Only showing: {', '.join(selected_statuses)}")
+        st.sidebar.caption("Other statuses excluded from all metrics & analyses")
+    
     # Main metrics
     st.header("📊 Key Metrics")
+    
+    # Add explanation if filters are active
+    if len(selected_statuses) < len(call_statuses) or len(excluded_numbers_list) > 0:
+        filter_info = []
+        if len(selected_statuses) < len(call_statuses):
+            filter_info.append(f"**Call Status**: Only {', '.join(selected_statuses)}")
+        if len(excluded_numbers_list) > 0:
+            filter_info.append(f"**Excluded**: {len(excluded_numbers_list)} numbers")
+        
+        st.info("🔍 **Active Filters**: " + " | ".join(filter_info) + "\n\nMetrics below reflect only the filtered data. To see all call statuses, select all options in the sidebar.")
     
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     
@@ -144,27 +159,34 @@ if uploaded_file is not None:
     could_not_connect = len(filtered_df[filtered_df['Call Status'] == 'could_not_connect'])
     completed = len(filtered_df[filtered_df['Call Status'] == 'completed'])
     
-    # Task completion success (true only)
+    # Task completion success (true only, from ALL filtered calls)
     task_success = len(filtered_df[filtered_df['Analysis.task_completion'] == True])
     
-    # Average duration (only for completed calls)
+    # Average duration (only for calls with duration > 0)
     avg_duration = filtered_df[filtered_df['Duration'] > 0]['Duration'].mean()
     
     with col1:
         st.metric("Calls Made", f"{total_calls:,}")
+        st.caption("Total filtered calls")
     with col2:
         st.metric("Call Placed", f"{call_placed:,}")
+        st.caption(f"{(call_placed/total_calls*100) if total_calls > 0 else 0:.1f}% of total")
     with col3:
         st.metric("Could Not Connect", f"{could_not_connect:,}")
+        st.caption(f"{(could_not_connect/total_calls*100) if total_calls > 0 else 0:.1f}% of total")
     with col4:
         st.metric("Call Completed", f"{completed:,}")
+        st.caption(f"{(completed/total_calls*100) if total_calls > 0 else 0:.1f}% of total")
     with col5:
         st.metric("Call Success", f"{task_success:,}")
         if completed > 0:
             success_rate = (task_success / completed) * 100
             st.caption(f"{success_rate:.1f}% of completed")
+        else:
+            st.caption("N/A")
     with col6:
         st.metric("Avg Duration", f"{avg_duration:.1f}s" if not pd.isna(avg_duration) else "N/A")
+        st.caption("For calls with duration > 0")
     
     # ==========================================
     # NTH CALL ANALYSIS SECTION
