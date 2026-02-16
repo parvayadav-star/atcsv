@@ -278,23 +278,36 @@ if uploaded_file is not None:
     with tab3:
         st.subheader("User Call Frequency Heatmap")
         
-        heatmap_type = st.radio(
-            "Select heatmap type:",
-            ["Total Calls vs Completed Calls", "Total Calls vs Task Success"],
-            horizontal=True
-        )
-        
-        # Deduplicate: one call per user per day
-        heatmap_df = filtered_df.copy()
-        heatmap_df['completed_flag'] = (heatmap_df['Call Status'] == 'completed').astype(int)
-        
-        heatmap_df = (
-            heatmap_df.sort_values(
-                by=['Number', 'call_date', 'completed_flag', 'Time'],
-                ascending=[True, True, False, True]
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            heatmap_type = st.radio(
+                "Select heatmap type:",
+                ["Total Calls vs Completed Calls", "Total Calls vs Task Success"],
+                horizontal=True
             )
-            .drop_duplicates(subset=['Number', 'call_date'], keep='first')
-        )
+        with col2:
+            deduplicate = st.checkbox(
+                "Deduplicate (1 call/user/day)", 
+                value=False,
+                help="Enable to count only one call per user per day (keeps best attempt)"
+            )
+        
+        # Use all calls or deduplicate based on toggle
+        heatmap_df = filtered_df.copy()
+        
+        if deduplicate:
+            st.info("📌 Deduplication enabled: Keeping one call per user per day (prioritizing completed calls)")
+            heatmap_df['completed_flag'] = (heatmap_df['Call Status'] == 'completed').astype(int)
+            
+            heatmap_df = (
+                heatmap_df.sort_values(
+                    by=['Number', 'call_date', 'completed_flag', 'Time'],
+                    ascending=[True, True, False, True]
+                )
+                .drop_duplicates(subset=['Number', 'call_date'], keep='first')
+            )
+        else:
+            st.info("📌 All calls included: Every call attempt is counted")
         
         if heatmap_type == "Total Calls vs Completed Calls":
             # User-level aggregation
