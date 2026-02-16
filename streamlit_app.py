@@ -55,12 +55,13 @@ def load_data(file):
 
 # File handling - check for CSV in data directory first
 @st.cache_data
-def find_latest_csv(directory="/"):
-    """Find the most recently modified CSV file in the directory"""
+def find_latest_csv(directory="."):
+    """Find the most recently modified CSV file in the directory (searches recursively)"""
     import glob
     import os
     
-    csv_files = glob.glob(os.path.join(directory, "*.csv"))
+    # Search recursively for CSV files
+    csv_files = glob.glob(os.path.join(directory, "**", "*.csv"), recursive=True)
     if not csv_files:
         return None
     
