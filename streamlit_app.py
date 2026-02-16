@@ -116,10 +116,18 @@ if uploaded_file is not None:
         excluded_numbers_list = [num.strip() for num in exclude_numbers.split('\n') if num.strip()]
     
     # Apply filters
+    # Handle task completion filter with NaN values properly
+    if None in selected_completions:
+        # Include NaN values when "N/A" is selected
+        task_filter = (df['Analysis.task_completion'].isin([x for x in selected_completions if x is not None]) | 
+                      df['Analysis.task_completion'].isna())
+    else:
+        task_filter = df['Analysis.task_completion'].isin(selected_completions)
+    
     filtered_df = df[
         (df['Use Case'].isin(selected_use_cases)) &
         (df['Call Status'].isin(selected_statuses)) &
-        (df['Analysis.task_completion'].isin(selected_completions)) &
+        task_filter &
         (df['Duration'] >= duration_range[0]) &
         (df['Duration'] <= duration_range[1])
     ]
