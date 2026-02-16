@@ -144,10 +144,23 @@ if uploaded_file is not None:
     
     # Number exclusion
     st.sidebar.subheader("🚫 Exclude Numbers")
+    
+    # Default blocked numbers
+    default_blocked = [
+        "917240662555",
+        "918003307101",
+        "918302666597",
+        "919079264644",
+        "918529038504"
+    ]
+    
+    default_blocked_text = "\n".join(default_blocked)
+    
     exclude_numbers = st.sidebar.text_area(
         "Enter numbers to exclude (one per line)",
-        height=100,
-        help="Add phone numbers to exclude from analysis"
+        value=default_blocked_text,
+        height=150,
+        help="Default blocked numbers are pre-filled. Add or remove as needed."
     )
     
     # Parse excluded numbers
@@ -695,3 +708,4 @@ else:
     - **Analysis.task_completion**: Task completion status (true, false, -)
     - And other optional analysis fields...
     """)
+    
