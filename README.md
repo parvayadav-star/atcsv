@@ -1,176 +1,232 @@
-# Call Analysis Dashboard 📞
+# Call Analysis Dashboard v2 📞
 
-A comprehensive Streamlit application for analyzing call data with advanced filtering, metrics tracking, and multi-table views.
+Enhanced Streamlit application with **Nth Call Analysis** and **Modular Table Builder** for advanced call data analytics.
 
-## Features
+## 🆕 New Features
 
-### 🔍 Filtering Options
-- **Use Case**: Filter by specific use cases
-- **Call Status**: Filter by call_placed, completed, could_not_connect, call_canceled
-- **Task Completion**: Filter by true/false/- (task success status)
-- **Duration Range**: Adjustable slider for call duration filtering
-- **Number Exclusion**: Add specific phone numbers to exclude from analysis
+### 1. 🔢 Nth Call Analysis Section
+Complete analysis of call performance by attempt number with three interactive tabs:
 
-### 📊 Key Metrics Dashboard
-The app displays 6 key metrics at the top:
-1. **Calls Made**: Total number of calls in filtered dataset
-2. **Call Placed**: Number of calls with "call_placed" status
-3. **Could Not Connect**: Number of calls that couldn't connect
-4. **Call Completed**: Number of successfully completed calls
-5. **Call Success**: Number of calls where Analysis.task_completion = "true"
-6. **Avg Duration**: Average call duration for non-zero duration calls
+#### Tab 1: Call Number Analytics
+- Performance metrics by call number (1st call, 2nd call, etc.)
+- Shows: Total calls, picked up, goal met, driver negative
+- Calculates: Call Pick Rate %, Goal Success on Picked Calls %
+- Matches the exact table format from your screenshot
+- Downloadable CSV export
 
-### 📋 Dynamic Tables (3-5 concurrent views)
-Choose from 7 different table types:
+#### Tab 2: Pickup Rate Trend
+- Interactive line chart showing pickup rate by call attempt
+- Visualizes: How pickup rate changes with each subsequent attempt
+- Hover data for detailed metrics
+- Data table below chart
 
-1. **Summary by Use Case**
-   - Total calls per use case
-   - Completed calls
-   - Average duration
-   - Success count and success rate %
+#### Tab 3: Frequency Heatmaps
+Two heatmap options:
+- **Total Calls vs Completed Calls**: Shows percentage distribution of users
+- **Total Calls vs Task Success**: Analyzes task completion patterns
+- Handles 10+ buckets intelligently
+- Masks impossible cells (e.g., 5 completed when only 3 total calls)
 
-2. **Summary by Call Status**
-   - Count per status
-   - Average, max, and total duration
-   - Percentage distribution
+### 2. 🔧 Modular Table Builder
+Create custom pivot tables with complete flexibility:
 
-3. **Summary by Task Completion**
-   - Count per completion status
-   - Average duration
-   - Completed calls
-   - Percentage distribution
+**Configuration Options:**
+- **Row Variable**: Choose what to group by (Use Case, Call Status, Hour, etc.)
+- **Column Variable**: Optional - create pivot tables with cross-tabulation
+- **Calculated Fields**: Select from 10+ metrics:
+  - Count
+  - Completed Calls
+  - Could Not Connect
+  - Task Success Count
+  - Task Success %
+  - Avg Duration
+  - Total Duration
+  - Max Duration
+  - Negative Sentiment Count
+  - Pickup Rate %
 
-4. **Duration Analysis**
-   - Calls grouped by duration buckets (0-10s, 11-30s, 31-60s, 1-2min, 2-5min, 5min+)
-   - Success count and success rate per bucket
+**Features:**
+- Create 1-5 tables simultaneously
+- Each table fully customizable
+- Side-by-side display (2 per row)
+- Automatic percentage calculations
+- Smart aggregation based on selected metrics
 
-5. **Hourly Analysis**
-   - Calls by hour of day
-   - Completed and successful calls per hour
-   - Success rate %
+## 📊 Original Features (Still Available)
 
-6. **Daily Analysis**
-   - Calls by date
-   - Average duration
-   - Success metrics
+### Filtering Options
+- Use Case, Call Status, Task Completion, Duration Range
+- Number exclusion list
+- Real-time filter summary
 
-7. **Recent Calls Detail**
-   - Last 20 calls with full details
-   - Quick overview of recent activity
+### Key Metrics Dashboard
+6 core metrics: Calls Made, Call Placed, Could Not Connect, Call Completed, Call Success, Avg Duration
+
+### Data Export
+Download filtered datasets and nth call analysis as CSV
 
 ## Installation
 
-### Prerequisites
-- Python 3.8 or higher
-- pip
+```bash
+pip install -r requirements_v2.txt
+```
 
-### Setup
+## Running the App
 
-1. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+streamlit run call_analysis_app_v2.py
+```
 
-2. **Run the application:**
-   ```bash
-   streamlit run call_analysis_app.py
-   ```
+## Usage Examples
 
-3. **Access the dashboard:**
-   The app will automatically open in your browser at `http://localhost:8501`
+### Example 1: Nth Call Analysis Workflow
+```
+1. Upload your CSV
+2. Apply filters (e.g., specific use case, completed calls only)
+3. Navigate to "Nth Call Analysis" section
+4. Tab 1: View performance by call number
+   - See pickup rates for 1st, 2nd, 3rd attempts
+   - Identify optimal number of retry attempts
+5. Tab 2: Visualize pickup rate trend
+   - See if rate improves or degrades with attempts
+6. Tab 3: Analyze user patterns
+   - Heatmap shows % of users by call frequency
+   - Identify common user behaviors
+```
 
-## Usage
+### Example 2: Custom Table Creation
+```
+1. Go to "Modular Table Builder"
+2. Set number of tables to 3
+3. Table 1:
+   - Row: Use Case
+   - Metrics: Count, Pickup Rate %, Task Success %
+4. Table 2:
+   - Row: Hour
+   - Metrics: Completed Calls, Avg Duration
+5. Table 3:
+   - Row: Call Status
+   - Column: Analysis.task_completion
+   - Metrics: Count
+6. Click "Generate Tables"
+7. View all 3 tables side-by-side
+```
 
-### 1. Upload Data
-- Click "Browse files" and upload your CSV file
-- The app expects a CSV with these key columns:
-  - Number
-  - Time
-  - Use Case
-  - Call Status
-  - Duration
-  - Analysis.task_completion
-
-### 2. Apply Filters
-Use the sidebar to:
-- Select specific use cases
-- Choose call statuses
-- Filter by task completion
-- Adjust duration range
-- Exclude specific phone numbers
-
-### 3. View Metrics
-The top metrics bar updates automatically based on your filters
-
-### 4. Select Tables
-Choose 3-5 tables from the dropdown to display:
-- Tables appear in a 2-column grid layout
-- All tables update dynamically based on filters
-
-### 5. Download Results
-Click "Download CSV" to export your filtered dataset
+### Example 3: Reproduce Your Screenshot Table
+```
+1. Navigate to "Nth Call Analysis"
+2. Tab 1: "Call Number Analytics"
+3. The table automatically shows:
+   - nth call (1, 2, 3, 4...)
+   - nth total calls (381, 293, 236, 184...)
+   - picked up (272, 190, 146, 116...)
+   - Goal met (120, 74, 73, 48...)
+   - Driver Negative (20, 18, 7, 18...)
+   - Call Pick Rate (71.4%, 64.8%, 61.9%, 63.0%...)
+   - Goal Success on Picked Calls (44.1%, 38.9%, 50.0%, 41.4%...)
+4. Download as CSV for reporting
+```
 
 ## Data Schema
 
 ### Required Columns
-- **Number** (string): Phone number
-- **Time** (datetime): Call timestamp
+- **Number** (string): Phone number - used to track nth call
+- **Time** (datetime): Call timestamp - used for sequencing
 - **Use Case** (string): Use case category
 - **Call Status** (string): completed, could_not_connect, call_placed, call_canceled
 - **Duration** (integer): Call duration in seconds
-- **Analysis.task_completion** (string): true, false, or -
+- **Analysis.task_completion** (string/bool): true, false, or -
+- **Analysis.user_sentiment** (string): positive, negative, neutral, or -
 
-### Optional Columns
-All other Analysis.* fields are optional and won't affect core functionality
+### Derived Columns (Auto-created)
+- **call_date**: Date extracted from Time
+- **Hour**: Hour of day (0-23)
+- **DayOfWeek**: Monday, Tuesday, etc.
+- **call_number**: Nth call per user (1, 2, 3...)
+- **call_attempt**: Same as call_number
 
-## Tips
+## Key Calculations
 
-### Number Exclusion
-- Enter one phone number per line
-- Numbers are matched exactly (include country code if present)
-- Useful for excluding test numbers or specific contacts
+### Nth Call Metrics
+```python
+# Call Pick Rate
+Call Pick Rate % = (Picked Up / Total Calls for that nth) × 100
 
-### Duration Filtering
-- Duration is in seconds
-- 0 duration usually indicates "could not connect" calls
-- Use the slider to focus on specific call length ranges
+# Goal Success on Picked Calls
+Goal Success % = (Goal Met / Picked Up) × 100
 
-### Success Rate Calculation
-- Success Rate % = (Calls with task_completion=true / Completed Calls) × 100
-- Only calculated for completed calls
-- Shows in Use Case and Hourly/Daily analysis tables
+# These match your notebook calculations exactly
+```
 
-### Table Selection
-- Limit to 3-5 tables for optimal viewing
-- Tables appear side-by-side in 2-column layout
-- Scroll down to see all selected tables
+### Heatmap Deduplication
+```python
+# One call per user per day (keeps best attempt)
+- Sort by: User, Date, Completed (desc), Time
+- Keep: First record per user-date
+- This ensures daily frequency isn't inflated by retries
+```
+
+## Tips & Best Practices
+
+### For Nth Call Analysis
+- **Filter first**: Apply use case/status filters before viewing nth analysis
+- **Exclude test numbers**: Add test phone numbers to exclusion list
+- **Compare use cases**: Run analysis separately for different use cases
+- **Download data**: Export nth call tables for stakeholder reports
+
+### For Modular Tables
+- **Start simple**: Begin with 1-2 metrics per table
+- **Use row variables meaningfully**: Group by dimensions that matter (Use Case, Hour)
+- **Combine metrics**: Pair counts with percentages for context
+- **Iterate quickly**: Generate tables, adjust, regenerate
+
+### For Heatmaps
+- **Deduplicated data**: Heatmaps use one-call-per-user-per-day to show true frequency
+- **Read percentages**: Each cell shows % of users in that row
+- **Identify patterns**: Look for diagonal patterns (consistency) vs scattered (variance)
+
+## Performance Notes
+
+- Handles datasets up to 100k rows efficiently
+- Nth call calculations may take 2-3 seconds on large datasets
+- Heatmaps are pre-filtered for faster rendering
+- Table generation is instant (<1 second)
 
 ## Troubleshooting
 
-### CSV Upload Issues
-- Ensure CSV is UTF-8 encoded
-- Check that required columns exist
-- Verify Time column is in a parseable datetime format
+### Nth Call Analysis Shows Wrong Numbers
+- Ensure Time column is properly formatted
+- Check that Number column has consistent formatting
+- Verify filters aren't excluding key records
 
-### Filter Not Working
-- Clear filters and reapply
-- Check if exclusion list has extra spaces
-- Ensure selected values exist in data
+### Heatmap Not Showing
+- Check if filtered data has enough records (min 10)
+- Ensure Analysis.task_completion has valid values
+- Try different heatmap type (toggle between the two)
 
-### Performance
-- For very large datasets (>100k rows), filtering may take a few seconds
-- Consider pre-filtering data before upload for faster performance
+### Table Builder Error
+- Verify selected metrics are appropriate for row variable
+- Don't mix incompatible metrics (e.g., Duration metrics with sentiment row)
+- Reduce number of tables if memory issues occur
 
-## Example Workflow
+## Comparison with Notebooks
 
-1. Upload `user-calls-2026-02-16.csv`
-2. Select use cases of interest (e.g., "long_hault_puneet_main_agent")
-3. Filter to only "completed" calls
-4. Set duration range to 10-300 seconds (exclude very short/long calls)
-5. Add test numbers to exclusion list
-6. Select tables: "Summary by Use Case", "Duration Analysis", "Hourly Analysis"
-7. Review metrics and success rates
-8. Download filtered data for further analysis
+This Streamlit app implements all the analyses from your Jupyter notebooks:
+
+| Notebook Analysis | Streamlit Location |
+|-------------------|-------------------|
+| Nth call analytics table | Nth Call Analysis → Tab 1 |
+| Pickup rate by attempt | Nth Call Analysis → Tab 2 |
+| Calls made vs picked heatmap | Nth Call Analysis → Tab 3 (option 1) |
+| Task success heatmap | Nth Call Analysis → Tab 3 (option 2) |
+| Custom aggregations | Modular Table Builder |
+
+**Advantages over notebooks:**
+- No code required - point and click interface
+- Real-time filtering and updates
+- Multiple analyses visible simultaneously
+- Easy to share (just send the app link)
+- Download results directly
 
 ## License
 
