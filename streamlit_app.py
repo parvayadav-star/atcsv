@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 from datetime import datetime
 
 # Page configuration
@@ -21,6 +23,27 @@ def load_data(file):
     df['Duration'] = pd.to_numeric(df['Duration'], errors='coerce').fillna(0)
     # Parse time
     df['Time'] = pd.to_datetime(df['Time'])
+    
+    # Normalize columns
+    df['Analysis.task_completion'] = (
+        df['Analysis.task_completion']
+        .astype(str)
+        .str.lower()
+        .map({'true': True, 'false': False, 'True': True, 'False': False})
+    )
+    
+    df['Analysis.user_sentiment'] = (
+        df['Analysis.user_sentiment']
+        .astype(str)
+        .str.lower()
+        .replace({'n.a': None, '-': None, 'nan': None})
+    )
+    
+    # Create derived columns
+    df['call_date'] = df['Time'].dt.date
+    df['Hour'] = df['Time'].dt.hour
+    df['DayOfWeek'] = df['Time'].dt.day_name()
+    
     return df
 
 # File uploader
@@ -53,13 +76,18 @@ if uploaded_file is not None:
     )
     
     # Task Completion filter
-    task_completions = sorted(df['Analysis.task_completion'].unique())
-    selected_completions = st.sidebar.multiselect(
+    task_completions = [True, False, None]
+    task_completion_labels = {True: "True", False: "False", None: "N/A"}
+    selected_completions_labels = st.sidebar.multiselect(
         "Select Task Completion",
-        options=task_completions,
-        default=task_completions,
+        options=[task_completion_labels[x] for x in task_completions],
+        default=[task_completion_labels[x] for x in task_completions],
         help="Filter by task completion status"
     )
+    
+    # Map back to actual values
+    label_to_value = {v: k for k, v in task_completion_labels.items()}
+    selected_completions = [label_to_value[label] for label in selected_completions_labels]
     
     # Duration filter
     st.sidebar.subheader("Duration Range (seconds)")
@@ -117,7 +145,7 @@ if uploaded_file is not None:
     completed = len(filtered_df[filtered_df['Call Status'] == 'completed'])
     
     # Task completion success (true only)
-    task_success = len(filtered_df[filtered_df['Analysis.task_completion'] == 'true'])
+    task_success = len(filtered_df[filtered_df['Analysis.task_completion'] == True])
     
     # Average duration (only for completed calls)
     avg_duration = filtered_df[filtered_df['Duration'] > 0]['Duration'].mean()
@@ -138,126 +166,419 @@ if uploaded_file is not None:
     with col6:
         st.metric("Avg Duration", f"{avg_duration:.1f}s" if not pd.isna(avg_duration) else "N/A")
     
-    # Table selector
-    st.header("📋 Analysis Tables")
-    st.markdown("Select which tables to display:")
+    # ==========================================
+    # NTH CALL ANALYSIS SECTION
+    # ==========================================
+    st.markdown("---")
+    st.header("🔢 Nth Call Analysis")
     
-    table_options = {
-        "Summary by Use Case": "use_case_summary",
-        "Summary by Call Status": "call_status_summary",
-        "Summary by Task Completion": "task_completion_summary",
-        "Duration Analysis": "duration_analysis",
-        "Hourly Analysis": "hourly_analysis",
-        "Daily Analysis": "daily_analysis",
-        "Recent Calls Detail": "recent_calls"
+    tab1, tab2, tab3 = st.tabs(["📊 Call Number Analytics", "📈 Pickup Rate by Attempt", "🔥 Frequency Heatmap"])
+    
+    with tab1:
+        st.subheader("Performance by Call Number")
+        
+        # Assign call number per user
+        analysis_df = filtered_df.copy()
+        analysis_df = analysis_df.sort_values(by=['Number', 'Time'])
+        analysis_df['call_number'] = analysis_df.groupby('Number').cumcount() + 1
+        
+        # Build analytics table
+        nth_analytics = (
+            analysis_df.groupby('call_number')
+            .agg(
+                total_calls=('call_number', 'count'),
+                picked_up=('Call Status', lambda x: (x == 'completed').sum()),
+                goal_met=('Analysis.task_completion', lambda x: x.fillna(False).sum()),
+                negative_sentiment=('Analysis.user_sentiment', lambda x: (x == 'negative').sum()),
+            )
+            .reset_index()
+        )
+        
+        # Calculate rates
+        nth_analytics['Call Pick Rate'] = (nth_analytics['picked_up'] / nth_analytics['total_calls'] * 100).round(1)
+        nth_analytics['Goal Success on Picked Calls'] = (
+            (nth_analytics['goal_met'] / nth_analytics['picked_up'] * 100)
+            .fillna(0)
+            .round(1)
+        )
+        nth_analytics['Driver Negative'] = nth_analytics['negative_sentiment']
+        
+        # Rename for display
+        display_nth = nth_analytics.rename(columns={
+            'call_number': 'nth call',
+            'total_calls': 'nth total calls',
+            'picked_up': 'picked up',
+            'goal_met': 'Goal met'
+        })
+        
+        # Reorder columns to match image
+        display_nth = display_nth[[
+            'nth call', 'nth total calls', 'picked up', 'Goal met', 
+            'Driver Negative', 'Call Pick Rate', 'Goal Success on Picked Calls'
+        ]]
+        
+        st.dataframe(display_nth, use_container_width=True, hide_index=True)
+        
+        # Add download button
+        csv = display_nth.to_csv(index=False)
+        st.download_button(
+            label="Download Nth Call Analysis",
+            data=csv,
+            file_name=f"nth_call_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv"
+        )
+    
+    with tab2:
+        st.subheader("Pickup Rate Trend by Call Attempt")
+        
+        # Calculate pickup rate by attempt
+        analysis_df = filtered_df.copy()
+        analysis_df = analysis_df.sort_values(by=['Number', 'Time'])
+        analysis_df['call_attempt'] = analysis_df.groupby('Number').cumcount() + 1
+        
+        attempt_funnel = (
+            analysis_df.groupby('call_attempt')
+            .agg(
+                attempts=('Call Status', 'count'),
+                completed=('Call Status', lambda x: (x == 'completed').sum())
+            )
+            .reset_index()
+        )
+        
+        attempt_funnel['pickup_rate_pct'] = (
+            attempt_funnel['completed'] / attempt_funnel['attempts'] * 100
+        ).round(1)
+        
+        # Plot
+        fig = px.line(
+            attempt_funnel, 
+            x='call_attempt', 
+            y='pickup_rate_pct',
+            markers=True,
+            labels={'call_attempt': 'Call Attempt Number', 'pickup_rate_pct': 'Pickup Rate (%)'},
+            title='Pickup Rate by Call Attempt Number'
+        )
+        fig.update_traces(line_color='#1f77b4', marker=dict(size=8))
+        fig.update_layout(hovermode='x unified')
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Show data table
+        st.dataframe(
+            attempt_funnel.rename(columns={
+                'call_attempt': 'Attempt', 
+                'attempts': 'Total Attempts',
+                'completed': 'Completed',
+                'pickup_rate_pct': 'Pickup Rate %'
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
+    
+    with tab3:
+        st.subheader("User Call Frequency Heatmap")
+        
+        heatmap_type = st.radio(
+            "Select heatmap type:",
+            ["Total Calls vs Completed Calls", "Total Calls vs Task Success"],
+            horizontal=True
+        )
+        
+        # Deduplicate: one call per user per day
+        heatmap_df = filtered_df.copy()
+        heatmap_df['completed_flag'] = (heatmap_df['Call Status'] == 'completed').astype(int)
+        
+        heatmap_df = (
+            heatmap_df.sort_values(
+                by=['Number', 'call_date', 'completed_flag', 'Time'],
+                ascending=[True, True, False, True]
+            )
+            .drop_duplicates(subset=['Number', 'call_date'], keep='first')
+        )
+        
+        if heatmap_type == "Total Calls vs Completed Calls":
+            # User-level aggregation
+            user_summary = (
+                heatmap_df.groupby('Number')
+                .agg(
+                    total_calls=('call_date', 'count'),
+                    completed_calls=('Call Status', lambda x: (x == 'completed').sum())
+                )
+                .reset_index()
+            )
+            
+            # Create 10+ bucket
+            user_summary['total_calls_bucket'] = user_summary['total_calls'].clip(upper=10)
+            user_summary['completed_calls_bucket'] = user_summary['completed_calls'].clip(upper=10)
+            
+            # Frequency table
+            freq_table = (
+                user_summary
+                .groupby(['total_calls_bucket', 'completed_calls_bucket'])
+                .size()
+                .reset_index(name='user_count')
+            )
+            
+            # Pivot + percentages
+            heatmap_pivot = freq_table.pivot(
+                index='total_calls_bucket',
+                columns='completed_calls_bucket',
+                values='user_count'
+            ).fillna(0)
+            
+            heatmap_pct = heatmap_pivot.div(heatmap_pivot.sum(axis=1), axis=0) * 100
+            
+            # Create mask for impossible cells
+            mask = np.zeros_like(heatmap_pct, dtype=bool)
+            for i, total_calls in enumerate(heatmap_pct.index):
+                for j, completed_calls in enumerate(heatmap_pct.columns):
+                    if completed_calls > total_calls:
+                        mask[i, j] = True
+            
+            # Apply mask
+            heatmap_pct_masked = heatmap_pct.copy()
+            heatmap_pct_masked[mask] = np.nan
+            
+            # Plot
+            fig = go.Figure(data=go.Heatmap(
+                z=heatmap_pct_masked.values,
+                x=[f"{int(x)}" for x in heatmap_pct_masked.columns],
+                y=[f"{int(x)}" if x < 10 else "10+" for x in heatmap_pct_masked.index],
+                colorscale='YlGnBu',
+                text=heatmap_pct_masked.values.round(1),
+                texttemplate='%{text:.1f}%',
+                textfont={"size": 10},
+                colorbar=dict(title="Percentage (%)")
+            ))
+            
+            fig.update_layout(
+                title='Percentage of Calls Picked Up per Total Calls Made',
+                xaxis_title='Calls Picked Up (Completed)',
+                yaxis_title='Total Calls Made',
+                height=600
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        
+        else:  # Task Success heatmap
+            # User-level aggregation
+            user_summary = (
+                heatmap_df.groupby('Number')
+                .agg(
+                    total_calls=('call_date', 'count'),
+                    task_true_completed=('Analysis.task_completion', lambda x: x.fillna(False).sum())
+                )
+                .reset_index()
+            )
+            
+            # Create 10+ bucket for total_calls
+            user_summary['total_calls_bucket'] = user_summary['total_calls'].apply(
+                lambda x: "10+" if x >= 10 else str(x)
+            )
+            
+            # Frequency table
+            freq_table = (
+                user_summary
+                .groupby(['total_calls_bucket', 'task_true_completed'])
+                .size()
+                .reset_index(name='user_count')
+            )
+            
+            # Pivot + percentages
+            heatmap_pivot = freq_table.pivot(
+                index='total_calls_bucket',
+                columns='task_true_completed',
+                values='user_count'
+            ).fillna(0)
+            
+            # Sort index properly
+            numeric_indices = [i for i in heatmap_pivot.index if i != "10+"]
+            ordered_index = sorted(numeric_indices, key=int)
+            if "10+" in heatmap_pivot.index:
+                ordered_index.append("10+")
+            heatmap_pivot = heatmap_pivot.loc[ordered_index]
+            
+            heatmap_pct = heatmap_pivot.div(heatmap_pivot.sum(axis=1), axis=0) * 100
+            
+            # Create mask for impossible cells
+            mask = np.zeros_like(heatmap_pct, dtype=bool)
+            for i, total_calls in enumerate(heatmap_pct.index):
+                max_calls = 10 if total_calls == "10+" else int(total_calls)
+                for j, task_true_calls in enumerate(heatmap_pct.columns):
+                    if task_true_calls > max_calls:
+                        mask[i, j] = True
+            
+            # Apply mask
+            heatmap_pct_masked = heatmap_pct.copy()
+            heatmap_pct_masked[mask] = np.nan
+            
+            # Plot
+            fig = go.Figure(data=go.Heatmap(
+                z=heatmap_pct_masked.values,
+                x=[f"{int(x)}" for x in heatmap_pct_masked.columns],
+                y=heatmap_pct_masked.index.tolist(),
+                colorscale='YlGnBu',
+                text=heatmap_pct_masked.values.round(1),
+                texttemplate='%{text:.1f}%',
+                textfont={"size": 10},
+                colorbar=dict(title="Percentage (%)")
+            ))
+            
+            fig.update_layout(
+                title='Task Analysis: Task=True vs Call Frequency',
+                xaxis_title='Completed Calls with Task = True',
+                yaxis_title='Total Calls Picked',
+                height=600
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+    
+    # ==========================================
+    # MODULAR TABLE BUILDER
+    # ==========================================
+    st.markdown("---")
+    st.header("🔧 Modular Table Builder")
+    
+    st.markdown("""
+    Create custom pivot tables by selecting:
+    - **Row Variable**: What to group by (rows)
+    - **Column Variable**: What to break down by (columns) - optional
+    - **Calculated Fields**: Metrics to calculate
+    """)
+    
+    # Number of tables to create
+    num_tables = st.number_input("Number of tables to create", min_value=1, max_value=5, value=3)
+    
+    # Available columns for grouping
+    categorical_cols = [
+        'Use Case', 'Call Status', 'Analysis.task_completion', 
+        'Analysis.user_sentiment', 'Hour', 'DayOfWeek'
+    ]
+    
+    # Available calculated fields
+    calc_field_options = {
+        'Count': lambda x: x.count(),
+        'Completed Calls': lambda x: (x == 'completed').sum() if x.name == 'Call Status' else 0,
+        'Could Not Connect': lambda x: (x == 'could_not_connect').sum() if x.name == 'Call Status' else 0,
+        'Task Success Count': lambda x: x.fillna(False).sum() if x.name == 'Analysis.task_completion' else 0,
+        'Task Success %': 'custom',  # Handle separately
+        'Avg Duration': lambda x: x.mean() if x.name == 'Duration' else 0,
+        'Total Duration': lambda x: x.sum() if x.name == 'Duration' else 0,
+        'Max Duration': lambda x: x.max() if x.name == 'Duration' else 0,
+        'Negative Sentiment Count': lambda x: (x == 'negative').sum() if x.name == 'Analysis.user_sentiment' else 0,
+        'Pickup Rate %': 'custom',
     }
     
-    selected_tables = st.multiselect(
-        "Choose tables to display (select 3-5)",
-        options=list(table_options.keys()),
-        default=list(table_options.keys())[:5],
-        max_selections=5
-    )
-    
-    # Display tables
-    if selected_tables:
-        # Create columns for side-by-side display
-        if len(selected_tables) <= 2:
-            cols = st.columns(len(selected_tables))
-        else:
-            # For 3+ tables, display in rows of 2
-            num_rows = (len(selected_tables) + 1) // 2
+    # Create table configurations
+    table_configs = []
+    for i in range(num_tables):
+        with st.expander(f"📊 Table {i+1} Configuration", expanded=(i==0)):
+            col1, col2 = st.columns(2)
             
-        table_idx = 0
-        for i in range(0, len(selected_tables), 2):
+            with col1:
+                row_var = st.selectbox(
+                    "Row Variable",
+                    options=categorical_cols,
+                    key=f"row_{i}"
+                )
+            
+            with col2:
+                use_col_var = st.checkbox("Use Column Variable", key=f"use_col_{i}")
+                if use_col_var:
+                    col_var = st.selectbox(
+                        "Column Variable",
+                        options=[c for c in categorical_cols if c != row_var],
+                        key=f"col_{i}"
+                    )
+                else:
+                    col_var = None
+            
+            # Select metrics
+            selected_metrics = st.multiselect(
+                "Select Calculated Fields",
+                options=list(calc_field_options.keys()),
+                default=['Count', 'Pickup Rate %'],
+                key=f"metrics_{i}"
+            )
+            
+            table_configs.append({
+                'row_var': row_var,
+                'col_var': col_var,
+                'metrics': selected_metrics
+            })
+    
+    # Generate tables button
+    if st.button("Generate Tables", type="primary"):
+        st.markdown("---")
+        
+        # Display tables side by side (2 per row)
+        for i in range(0, len(table_configs), 2):
             cols = st.columns(2)
             
             for j, col in enumerate(cols):
-                if i + j < len(selected_tables):
-                    table_name = selected_tables[i + j]
-                    table_key = table_options[table_name]
+                if i + j < len(table_configs):
+                    config = table_configs[i + j]
                     
                     with col:
-                        st.subheader(table_name)
+                        st.subheader(f"Table {i+j+1}")
                         
-                        # Generate table based on selection
-                        if table_key == "use_case_summary":
-                            summary = filtered_df.groupby('Use Case').agg({
-                                'Number': 'count',
-                                'Call Status': lambda x: (x == 'completed').sum(),
-                                'Duration': 'mean',
-                                'Analysis.task_completion': lambda x: (x == 'true').sum()
-                            }).round(1)
-                            summary.columns = ['Total Calls', 'Completed', 'Avg Duration (s)', 'Success']
-                            summary['Success Rate %'] = ((summary['Success'] / summary['Completed']) * 100).round(1)
-                            summary = summary.fillna(0)
-                            st.dataframe(summary, use_container_width=True)
+                        try:
+                            # Build the table based on configuration
+                            if config['col_var'] is None:
+                                # Simple groupby
+                                agg_dict = {}
+                                
+                                for metric in config['metrics']:
+                                    if metric == 'Count':
+                                        agg_dict['Number'] = 'count'
+                                    elif metric == 'Completed Calls':
+                                        agg_dict['Completed'] = ('Call Status', lambda x: (x == 'completed').sum())
+                                    elif metric == 'Could Not Connect':
+                                        agg_dict['Could Not Connect'] = ('Call Status', lambda x: (x == 'could_not_connect').sum())
+                                    elif metric == 'Task Success Count':
+                                        agg_dict['Task Success'] = ('Analysis.task_completion', lambda x: x.fillna(False).sum())
+                                    elif metric == 'Avg Duration':
+                                        agg_dict['Avg Duration (s)'] = ('Duration', 'mean')
+                                    elif metric == 'Total Duration':
+                                        agg_dict['Total Duration (s)'] = ('Duration', 'sum')
+                                    elif metric == 'Max Duration':
+                                        agg_dict['Max Duration (s)'] = ('Duration', 'max')
+                                    elif metric == 'Negative Sentiment Count':
+                                        agg_dict['Negative Sentiment'] = ('Analysis.user_sentiment', lambda x: (x == 'negative').sum())
+                                
+                                if agg_dict:
+                                    result = filtered_df.groupby(config['row_var']).agg(**agg_dict).round(1)
+                                    
+                                    # Add calculated percentages
+                                    if 'Pickup Rate %' in config['metrics'] and 'Completed' in result.columns:
+                                        result['Pickup Rate %'] = (
+                                            (result['Completed'] / result.get('Number', result['Completed'])) * 100
+                                        ).round(1)
+                                    
+                                    if 'Task Success %' in config['metrics'] and 'Task Success' in result.columns and 'Completed' in result.columns:
+                                        result['Task Success %'] = (
+                                            (result['Task Success'] / result['Completed']) * 100
+                                        ).fillna(0).round(1)
+                                    
+                                    st.dataframe(result, use_container_width=True)
+                                else:
+                                    st.warning("Please select at least one metric")
                             
-                        elif table_key == "call_status_summary":
-                            summary = filtered_df.groupby('Call Status').agg({
-                                'Number': 'count',
-                                'Duration': ['mean', 'max', 'sum']
-                            }).round(1)
-                            summary.columns = ['Count', 'Avg Duration (s)', 'Max Duration (s)', 'Total Duration (s)']
-                            summary['Percentage'] = ((summary['Count'] / summary['Count'].sum()) * 100).round(1)
-                            st.dataframe(summary, use_container_width=True)
-                            
-                        elif table_key == "task_completion_summary":
-                            summary = filtered_df.groupby('Analysis.task_completion').agg({
-                                'Number': 'count',
-                                'Duration': 'mean',
-                                'Call Status': lambda x: (x == 'completed').sum()
-                            }).round(1)
-                            summary.columns = ['Count', 'Avg Duration (s)', 'Completed Calls']
-                            summary['Percentage'] = ((summary['Count'] / summary['Count'].sum()) * 100).round(1)
-                            st.dataframe(summary, use_container_width=True)
-                            
-                        elif table_key == "duration_analysis":
-                            # Create duration buckets
-                            bins = [0, 10, 30, 60, 120, 300, float('inf')]
-                            labels = ['0-10s', '11-30s', '31-60s', '1-2min', '2-5min', '5min+']
-                            filtered_df['Duration_Bucket'] = pd.cut(filtered_df['Duration'], bins=bins, labels=labels, include_lowest=True)
-                            
-                            summary = filtered_df.groupby('Duration_Bucket', observed=True).agg({
-                                'Number': 'count',
-                                'Analysis.task_completion': lambda x: (x == 'true').sum()
-                            })
-                            summary.columns = ['Count', 'Success']
-                            summary['Success Rate %'] = ((summary['Success'] / summary['Count']) * 100).round(1)
-                            summary = summary.fillna(0)
-                            st.dataframe(summary, use_container_width=True)
-                            
-                        elif table_key == "hourly_analysis":
-                            filtered_df['Hour'] = filtered_df['Time'].dt.hour
-                            summary = filtered_df.groupby('Hour').agg({
-                                'Number': 'count',
-                                'Call Status': lambda x: (x == 'completed').sum(),
-                                'Analysis.task_completion': lambda x: (x == 'true').sum()
-                            })
-                            summary.columns = ['Total Calls', 'Completed', 'Success']
-                            summary['Success Rate %'] = ((summary['Success'] / summary['Completed']) * 100).round(1)
-                            summary = summary.fillna(0)
-                            st.dataframe(summary, use_container_width=True)
-                            
-                        elif table_key == "daily_analysis":
-                            filtered_df['Date'] = filtered_df['Time'].dt.date
-                            summary = filtered_df.groupby('Date').agg({
-                                'Number': 'count',
-                                'Call Status': lambda x: (x == 'completed').sum(),
-                                'Duration': 'mean',
-                                'Analysis.task_completion': lambda x: (x == 'true').sum()
-                            }).round(1)
-                            summary.columns = ['Total Calls', 'Completed', 'Avg Duration (s)', 'Success']
-                            summary['Success Rate %'] = ((summary['Success'] / summary['Completed']) * 100).round(1)
-                            summary = summary.fillna(0)
-                            st.dataframe(summary, use_container_width=True)
-                            
-                        elif table_key == "recent_calls":
-                            recent = filtered_df.nlargest(20, 'Time')[
-                                ['Number', 'Time', 'Use Case', 'Call Status', 'Duration', 'Analysis.task_completion']
-                            ].copy()
-                            recent['Time'] = recent['Time'].dt.strftime('%Y-%m-%d %H:%M')
-                            st.dataframe(recent, use_container_width=True, hide_index=True)
+                            else:
+                                # Pivot table
+                                if 'Count' in config['metrics']:
+                                    result = pd.crosstab(
+                                        filtered_df[config['row_var']],
+                                        filtered_df[config['col_var']],
+                                        margins=True,
+                                        margins_name='Total'
+                                    )
+                                    st.dataframe(result, use_container_width=True)
+                                else:
+                                    st.info("Pivot tables currently support Count metric. More coming soon!")
+                        
+                        except Exception as e:
+                            st.error(f"Error generating table: {str(e)}")
     
     # Download filtered data
     st.markdown("---")
