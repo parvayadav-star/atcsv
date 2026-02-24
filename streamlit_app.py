@@ -32,8 +32,8 @@ def load_data(file):
     df['Time'] = pd.to_datetime(df['Time'])
     
     # Normalize columns
-    df['Analysis.task_completion'] = (
-        df['Analysis.task_completion']
+    df['Analysis.call_quality'] = (
+        df['Analysis.call_quality']
         .astype(str)
         .str.lower()
         .map({'true': True, 'false': False, 'True': True, 'False': False})
@@ -115,14 +115,14 @@ if uploaded_file is not None:
         help="Filter by call status"
     )
     
-    # Task Completion filter
+    # Call Quality filter
     task_completions = [True, False, None]
     task_completion_labels = {True: "True", False: "False", None: "N/A"}
     selected_completions_labels = st.sidebar.multiselect(
-        "Select Task Completion",
+        "Select Call Quality",
         options=[task_completion_labels[x] for x in task_completions],
         default=[task_completion_labels[x] for x in task_completions],
-        help="Filter by task completion status"
+        help="Filter by call quality status"
     )
     
     # Map back to actual values
@@ -169,13 +169,13 @@ if uploaded_file is not None:
         excluded_numbers_list = [num.strip() for num in exclude_numbers.split('\n') if num.strip()]
     
     # Apply filters
-    # Handle task completion filter with NaN values properly
+    # Handle call quality filter with NaN values properly
     if None in selected_completions:
         # Include NaN values when "N/A" is selected
-        task_filter = (df['Analysis.task_completion'].isin([x for x in selected_completions if x is not None]) | 
-                      df['Analysis.task_completion'].isna())
+        task_filter = (df['Analysis.call_quality'].isin([x for x in selected_completions if x is not None]) | 
+                      df['Analysis.call_quality'].isna())
     else:
-        task_filter = df['Analysis.task_completion'].isin(selected_completions)
+        task_filter = df['Analysis.call_quality'].isin(selected_completions)
     
     filtered_df = df[
         (df['Use Case'].isin(selected_use_cases)) &
@@ -220,8 +220,8 @@ if uploaded_file is not None:
     could_not_connect = len(filtered_df[filtered_df['Call Status'] == 'could_not_connect'])
     completed = len(filtered_df[filtered_df['Call Status'] == 'completed'])
     
-    # Task completion success (true only, from ALL filtered calls)
-    task_success = len(filtered_df[filtered_df['Analysis.task_completion'] == True])
+    # Call Quality success (true only, from ALL filtered calls)
+    task_success = len(filtered_df[filtered_df['Analysis.call_quality'] == True])
     
     # Average duration (only for calls with duration > 0)
     avg_duration = filtered_df[filtered_df['Duration'] > 0]['Duration'].mean()
@@ -271,7 +271,7 @@ if uploaded_file is not None:
             .agg(
                 total_calls=('call_number', 'count'),
                 picked_up=('Call Status', lambda x: (x == 'completed').sum()),
-                goal_met=('Analysis.task_completion', lambda x: (x == True).sum()),  # Only True, not fillna
+                goal_met=('Analysis.call_quality', lambda x: (x == True).sum()),  # Only True, not fillna
                 negative_sentiment=('Analysis.user_sentiment', lambda x: (x == 'negative').sum()),
             )
             .reset_index()
@@ -366,7 +366,7 @@ if uploaded_file is not None:
         with col1:
             heatmap_type = st.radio(
                 "Select heatmap type:",
-                ["Total Calls vs Completed Calls", "Total Calls vs Task Success"],
+                ["Total Calls vs Completed Calls", "Total Calls vs Quality Success"],
                 horizontal=True
             )
         with col2:
@@ -457,13 +457,13 @@ if uploaded_file is not None:
             
             st.plotly_chart(fig, use_container_width=True)
         
-        else:  # Task Success heatmap
+        else:  # Quality Success heatmap
             # User-level aggregation - ALL calls included
             user_summary = (
                 heatmap_df.groupby('Number')
                 .agg(
                     total_calls=('Number', 'count'),  # All calls
-                    task_true_completed=('Analysis.task_completion', lambda x: (x == True).sum())  # Only True
+                    task_true_completed=('Analysis.call_quality', lambda x: (x == True).sum())  # Only True
                 )
                 .reset_index()
             )
@@ -522,8 +522,8 @@ if uploaded_file is not None:
             ))
             
             fig.update_layout(
-                title='Task Analysis: Task=True vs Call Frequency',
-                xaxis_title='Completed Calls with Task = True',
+                title='Quality Analysis: Quality=True vs Call Frequency',
+                xaxis_title='Completed Calls with Quality = True',
                 yaxis_title='Total Calls Picked',
                 height=600
             )
@@ -548,7 +548,7 @@ if uploaded_file is not None:
     
     # Available columns for grouping
     categorical_cols = [
-        'Use Case', 'Call Status', 'Analysis.task_completion', 
+        'Use Case', 'Call Status', 'Analysis.call_quality', 
         'Analysis.user_sentiment', 'Hour', 'DayOfWeek'
     ]
     
@@ -557,8 +557,8 @@ if uploaded_file is not None:
         'Count': lambda x: x.count(),
         'Completed Calls': lambda x: (x == 'completed').sum() if x.name == 'Call Status' else 0,
         'Could Not Connect': lambda x: (x == 'could_not_connect').sum() if x.name == 'Call Status' else 0,
-        'Task Success Count': lambda x: x.fillna(False).sum() if x.name == 'Analysis.task_completion' else 0,
-        'Task Success %': 'custom',  # Handle separately
+        'Quality Success Count': lambda x: x.fillna(False).sum() if x.name == 'Analysis.call_quality' else 0,
+        'Quality Success %': 'custom',  # Handle separately
         'Avg Duration': lambda x: x.mean() if x.name == 'Duration' else 0,
         'Total Duration': lambda x: x.sum() if x.name == 'Duration' else 0,
         'Max Duration': lambda x: x.max() if x.name == 'Duration' else 0,
@@ -632,8 +632,8 @@ if uploaded_file is not None:
                                         agg_dict['Completed'] = ('Call Status', lambda x: (x == 'completed').sum())
                                     elif metric == 'Could Not Connect':
                                         agg_dict['Could Not Connect'] = ('Call Status', lambda x: (x == 'could_not_connect').sum())
-                                    elif metric == 'Task Success Count':
-                                        agg_dict['Task Success'] = ('Analysis.task_completion', lambda x: (x == True).sum())
+                                    elif metric == 'Quality Success Count':
+                                        agg_dict['Quality Success'] = ('Analysis.call_quality', lambda x: (x == True).sum())
                                     elif metric == 'Avg Duration':
                                         agg_dict['Avg Duration (s)'] = ('Duration', 'mean')
                                     elif metric == 'Total Duration':
@@ -652,9 +652,9 @@ if uploaded_file is not None:
                                             (result['Completed'] / result.get('Number', result['Completed'])) * 100
                                         ).round(1)
                                     
-                                    if 'Task Success %' in config['metrics'] and 'Task Success' in result.columns and 'Completed' in result.columns:
-                                        result['Task Success %'] = (
-                                            (result['Task Success'] / result['Completed']) * 100
+                                    if 'Quality Success %' in config['metrics'] and 'Quality Success' in result.columns and 'Completed' in result.columns:
+                                        result['Quality Success %'] = (
+                                            (result['Quality Success'] / result['Completed']) * 100
                                         ).fillna(0).round(1)
                                     
                                     st.dataframe(result, use_container_width=True)
@@ -705,7 +705,6 @@ else:
     - **Use Case**: Use case category
     - **Call Status**: Status (e.g., completed, could_not_connect, call_placed)
     - **Duration**: Call duration in seconds
-    - **Analysis.task_completion**: Task completion status (true, false, -)
+    - **Analysis.call_quality**: Call quality status (true, false, -)
     - And other optional analysis fields...
     """)
-    
