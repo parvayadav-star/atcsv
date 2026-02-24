@@ -25,32 +25,32 @@ def load_data(file):
         df = pd.read_csv(file)
     else:
         df = pd.read_csv(file)
-    
+   
     # Convert duration to numeric if needed
     df['Duration'] = pd.to_numeric(df['Duration'], errors='coerce').fillna(0)
     # Parse time
     df['Time'] = pd.to_datetime(df['Time'])
-    
+   
     # Normalize columns
-    df['Analysis.task_completion'] = (
-        df['Analysis.task_completion']
+    df['Analysis.call_quality'] = (
+        df['Analysis.call_quality']
         .astype(str)
         .str.lower()
         .map({'true': True, 'false': False, 'True': True, 'False': False})
     )
-    
+   
     df['Analysis.user_sentiment'] = (
         df['Analysis.user_sentiment']
         .astype(str)
         .str.lower()
         .replace({'n.a': None, '-': None, 'nan': None})
     )
-    
+   
     # Create derived columns
     df['call_date'] = df['Time'].dt.date
     df['Hour'] = df['Time'].dt.hour
     df['DayOfWeek'] = df['Time'].dt.day_name()
-    
+   
     return df
 
 # File handling - check for CSV in data directory first
@@ -59,12 +59,12 @@ def find_latest_csv(directory="."):
     """Find the most recently modified CSV file in the directory (searches recursively)"""
     import glob
     import os
-    
+   
     # Search recursively for CSV files
     csv_files = glob.glob(os.path.join(directory, "**", "*.csv"), recursive=True)
     if not csv_files:
         return None
-    
+   
     # Sort by modification time, newest first
     latest_file = max(csv_files, key=os.path.getmtime)
     return latest_file
@@ -74,7 +74,7 @@ auto_loaded_file = find_latest_csv()
 
 if auto_loaded_file:
     st.success(f"✅ Auto-loaded: `{os.path.basename(auto_loaded_file)}`")
-    
+   
     # Option to upload different file
     with st.expander("📤 Upload a different file"):
         manual_upload = st.file_uploader("Upload your call data CSV", type=['csv'])
@@ -91,12 +91,12 @@ else:
 
 if uploaded_file is not None:
     df = load_data(uploaded_file)
-    
+   
     st.success(f"✅ Loaded {len(df):,} call records")
-    
+   
     # Sidebar for filters
     st.sidebar.header("🔍 Filters")
-    
+   
     # Use Case filter
     use_cases = sorted(df['Use Case'].unique())
     selected_use_cases = st.sidebar.multiselect(
@@ -105,7 +105,7 @@ if uploaded_file is not None:
         default=use_cases,
         help="Filter by use case"
     )
-    
+   
     # Call Status filter
     call_statuses = sorted(df['Call Status'].unique())
     selected_statuses = st.sidebar.multiselect(
@@ -114,26 +114,26 @@ if uploaded_file is not None:
         default=call_statuses,
         help="Filter by call status"
     )
-    
-    # Task Completion filter
+   
+    # Call Quality filter
     task_completions = [True, False, None]
     task_completion_labels = {True: "True", False: "False", None: "N/A"}
     selected_completions_labels = st.sidebar.multiselect(
-        "Select Task Completion",
+        "Select Call Quality",
         options=[task_completion_labels[x] for x in task_completions],
         default=[task_completion_labels[x] for x in task_completions],
-        help="Filter by task completion status"
+        help="Filter by call quality status"
     )
-    
+   
     # Map back to actual values
     label_to_value = {v: k for k, v in task_completion_labels.items()}
     selected_completions = [label_to_value[label] for label in selected_completions_labels]
-    
+   
     # Duration filter
     st.sidebar.subheader("Duration Range (seconds)")
     min_duration = int(df['Duration'].min())
     max_duration = int(df['Duration'].max())
-    
+   
     duration_range = st.sidebar.slider(
         "Select duration range",
         min_value=min_duration,
@@ -141,10 +141,10 @@ if uploaded_file is not None:
         value=(min_duration, max_duration),
         help="Filter by call duration in seconds"
     )
-    
+   
     # Number exclusion
     st.sidebar.subheader("🚫 Exclude Numbers")
-    
+   
     # Default blocked numbers
     default_blocked = [
         "917240662555",
@@ -153,30 +153,30 @@ if uploaded_file is not None:
         "919079264644",
         "918529038504"
     ]
-    
+   
     default_blocked_text = "\n".join(default_blocked)
-    
+   
     exclude_numbers = st.sidebar.text_area(
         "Enter numbers to exclude (one per line)",
         value=default_blocked_text,
         height=150,
         help="Default blocked numbers are pre-filled. Add or remove as needed."
     )
-    
+   
     # Parse excluded numbers
     excluded_numbers_list = []
     if exclude_numbers:
         excluded_numbers_list = [num.strip() for num in exclude_numbers.split('\n') if num.strip()]
-    
+   
     # Apply filters
-    # Handle task completion filter with NaN values properly
+    # Handle call quality filter with NaN values properly
     if None in selected_completions:
         # Include NaN values when "N/A" is selected
-        task_filter = (df['Analysis.task_completion'].isin([x for x in selected_completions if x is not None]) | 
-                      df['Analysis.task_completion'].isna())
+        task_filter = (df['Analysis.call_quality'].isin([x for x in selected_completions if x is not None]) |
+                      df['Analysis.call_quality'].isna())
     else:
-        task_filter = df['Analysis.task_completion'].isin(selected_completions)
-    
+        task_filter = df['Analysis.call_quality'].isin(selected_completions)
+   
     filtered_df = df[
         (df['Use Case'].isin(selected_use_cases)) &
         (df['Call Status'].isin(selected_statuses)) &
@@ -184,25 +184,25 @@ if uploaded_file is not None:
         (df['Duration'] >= duration_range[0]) &
         (df['Duration'] <= duration_range[1])
     ]
-    
+   
     # Apply number exclusion
     if excluded_numbers_list:
         filtered_df = filtered_df[~filtered_df['Number'].isin(excluded_numbers_list)]
         st.sidebar.info(f"Excluding {len(excluded_numbers_list)} numbers")
-    
+   
     # Display filter summary
     st.sidebar.markdown("---")
     st.sidebar.metric("Filtered Records", f"{len(filtered_df):,}")
     st.sidebar.metric("Excluded", f"{len(df) - len(filtered_df):,}")
-    
+   
     # Warning about filtering
     if len(selected_statuses) < len(call_statuses):
         st.sidebar.warning(f"⚠️ Only showing: {', '.join(selected_statuses)}")
         st.sidebar.caption("Other statuses excluded from all metrics & analyses")
-    
+   
     # Main metrics
     st.header("📊 Key Metrics")
-    
+   
     # Add explanation if filters are active
     if len(selected_statuses) < len(call_statuses) or len(excluded_numbers_list) > 0:
         filter_info = []
@@ -210,22 +210,22 @@ if uploaded_file is not None:
             filter_info.append(f"**Call Status**: Only {', '.join(selected_statuses)}")
         if len(excluded_numbers_list) > 0:
             filter_info.append(f"**Excluded**: {len(excluded_numbers_list)} numbers")
-        
+       
         st.info("🔍 **Active Filters**: " + " | ".join(filter_info) + "\n\nMetrics below reflect only the filtered data. To see all call statuses, select all options in the sidebar.")
-    
+   
     col1, col2, col3, col4, col5, col6 = st.columns(6)
-    
+   
     total_calls = len(filtered_df)
     call_placed = len(filtered_df[filtered_df['Call Status'] == 'call_placed'])
     could_not_connect = len(filtered_df[filtered_df['Call Status'] == 'could_not_connect'])
     completed = len(filtered_df[filtered_df['Call Status'] == 'completed'])
-    
-    # Task completion success (true only, from ALL filtered calls)
-    task_success = len(filtered_df[filtered_df['Analysis.task_completion'] == True])
-    
+   
+    # Call Quality success (true only, from ALL filtered calls)
+    task_success = len(filtered_df[filtered_df['Analysis.call_quality'] == True])
+   
     # Average duration (only for calls with duration > 0)
     avg_duration = filtered_df[filtered_df['Duration'] > 0]['Duration'].mean()
-    
+   
     with col1:
         st.metric("Calls Made", f"{total_calls:,}")
         st.caption("Total filtered calls")
@@ -248,35 +248,35 @@ if uploaded_file is not None:
     with col6:
         st.metric("Avg Duration", f"{avg_duration:.1f}s" if not pd.isna(avg_duration) else "N/A")
         st.caption("For calls with duration > 0")
-    
+   
     # ==========================================
     # NTH CALL ANALYSIS SECTION
     # ==========================================
     st.markdown("---")
     st.header("🔢 Nth Call Analysis")
-    
+   
     tab1, tab2, tab3 = st.tabs(["📊 Call Number Analytics", "📈 Pickup Rate by Attempt", "🔥 Frequency Heatmap"])
-    
+   
     with tab1:
         st.subheader("Performance by Call Number")
-        
+       
         # Assign call number per user
         analysis_df = filtered_df.copy()
         analysis_df = analysis_df.sort_values(by=['Number', 'Time'])
         analysis_df['call_number'] = analysis_df.groupby('Number').cumcount() + 1
-        
+       
         # Build analytics table - INCLUDING all call statuses
         nth_analytics = (
             analysis_df.groupby('call_number')
             .agg(
                 total_calls=('call_number', 'count'),
                 picked_up=('Call Status', lambda x: (x == 'completed').sum()),
-                goal_met=('Analysis.task_completion', lambda x: (x == True).sum()),  # Only True, not fillna
+                goal_met=('Analysis.call_quality', lambda x: (x == True).sum()),  # Only True, not fillna
                 negative_sentiment=('Analysis.user_sentiment', lambda x: (x == 'negative').sum()),
             )
             .reset_index()
         )
-        
+       
         # Calculate rates
         nth_analytics['Call Pick Rate'] = (nth_analytics['picked_up'] / nth_analytics['total_calls'] * 100).round(1)
         nth_analytics['Goal Success on Picked Calls'] = (
@@ -286,7 +286,7 @@ if uploaded_file is not None:
             .round(1)
         )
         nth_analytics['Driver Negative'] = nth_analytics['negative_sentiment']
-        
+       
         # Rename for display
         display_nth = nth_analytics.rename(columns={
             'call_number': 'nth call',
@@ -294,15 +294,15 @@ if uploaded_file is not None:
             'picked_up': 'picked up',
             'goal_met': 'Goal met'
         })
-        
+       
         # Reorder columns to match image
         display_nth = display_nth[[
-            'nth call', 'nth total calls', 'picked up', 'Goal met', 
+            'nth call', 'nth total calls', 'picked up', 'Goal met',
             'Driver Negative', 'Call Pick Rate', 'Goal Success on Picked Calls'
         ]]
-        
+       
         st.dataframe(display_nth, use_container_width=True, hide_index=True)
-        
+       
         # Add download button
         csv = display_nth.to_csv(index=False)
         st.download_button(
@@ -311,15 +311,15 @@ if uploaded_file is not None:
             file_name=f"nth_call_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv"
         )
-    
+   
     with tab2:
         st.subheader("Pickup Rate Trend by Call Attempt")
-        
+       
         # Calculate pickup rate by attempt - INCLUDING all call statuses
         analysis_df = filtered_df.copy()
         analysis_df = analysis_df.sort_values(by=['Number', 'Time'])
         analysis_df['call_attempt'] = analysis_df.groupby('Number').cumcount() + 1
-        
+       
         attempt_funnel = (
             analysis_df.groupby('call_attempt')
             .agg(
@@ -328,15 +328,15 @@ if uploaded_file is not None:
             )
             .reset_index()
         )
-        
+       
         attempt_funnel['pickup_rate_pct'] = (
             attempt_funnel['completed'] / attempt_funnel['attempts'] * 100
         ).round(1)
-        
+       
         # Plot
         fig = px.line(
-            attempt_funnel, 
-            x='call_attempt', 
+            attempt_funnel,
+            x='call_attempt',
             y='pickup_rate_pct',
             markers=True,
             labels={'call_attempt': 'Call Attempt Number', 'pickup_rate_pct': 'Pickup Rate (%)'},
@@ -344,13 +344,13 @@ if uploaded_file is not None:
         )
         fig.update_traces(line_color='#1f77b4', marker=dict(size=8))
         fig.update_layout(hovermode='x unified')
-        
+       
         st.plotly_chart(fig, use_container_width=True)
-        
+       
         # Show data table
         st.dataframe(
             attempt_funnel.rename(columns={
-                'call_attempt': 'Attempt', 
+                'call_attempt': 'Attempt',
                 'attempts': 'Total Attempts',
                 'completed': 'Completed',
                 'pickup_rate_pct': 'Pickup Rate %'
@@ -358,31 +358,31 @@ if uploaded_file is not None:
             use_container_width=True,
             hide_index=True
         )
-    
+   
     with tab3:
         st.subheader("User Call Frequency Heatmap")
-        
+       
         col1, col2 = st.columns([2, 1])
         with col1:
             heatmap_type = st.radio(
                 "Select heatmap type:",
-                ["Total Calls vs Completed Calls", "Total Calls vs Task Success"],
+                ["Total Calls vs Completed Calls", "Total Calls vs Quality Success"],
                 horizontal=True
             )
         with col2:
             deduplicate = st.checkbox(
-                "Deduplicate (1 call/user/day)", 
+                "Deduplicate (1 call/user/day)",
                 value=False,
                 help="Enable to count only one call per user per day (keeps best attempt)"
             )
-        
+       
         # Use all calls or deduplicate based on toggle
         heatmap_df = filtered_df.copy()
-        
+       
         if deduplicate:
             st.info("📌 Deduplication enabled: Keeping one call per user per day (prioritizing completed calls)")
             heatmap_df['completed_flag'] = (heatmap_df['Call Status'] == 'completed').astype(int)
-            
+           
             heatmap_df = (
                 heatmap_df.sort_values(
                     by=['Number', 'call_date', 'completed_flag', 'Time'],
@@ -392,7 +392,7 @@ if uploaded_file is not None:
             )
         else:
             st.info("📌 All calls included: Every call attempt is counted")
-        
+       
         if heatmap_type == "Total Calls vs Completed Calls":
             # User-level aggregation - ALL calls included
             user_summary = (
@@ -403,11 +403,11 @@ if uploaded_file is not None:
                 )
                 .reset_index()
             )
-            
+           
             # Create 10+ bucket
             user_summary['total_calls_bucket'] = user_summary['total_calls'].clip(upper=10)
             user_summary['completed_calls_bucket'] = user_summary['completed_calls'].clip(upper=10)
-            
+           
             # Frequency table
             freq_table = (
                 user_summary
@@ -415,27 +415,27 @@ if uploaded_file is not None:
                 .size()
                 .reset_index(name='user_count')
             )
-            
+           
             # Pivot + percentages
             heatmap_pivot = freq_table.pivot(
                 index='total_calls_bucket',
                 columns='completed_calls_bucket',
                 values='user_count'
             ).fillna(0)
-            
+           
             heatmap_pct = heatmap_pivot.div(heatmap_pivot.sum(axis=1), axis=0) * 100
-            
+           
             # Create mask for impossible cells
             mask = np.zeros_like(heatmap_pct, dtype=bool)
             for i, total_calls in enumerate(heatmap_pct.index):
                 for j, completed_calls in enumerate(heatmap_pct.columns):
                     if completed_calls > total_calls:
                         mask[i, j] = True
-            
+           
             # Apply mask
             heatmap_pct_masked = heatmap_pct.copy()
             heatmap_pct_masked[mask] = np.nan
-            
+           
             # Plot
             fig = go.Figure(data=go.Heatmap(
                 z=heatmap_pct_masked.values,
@@ -447,32 +447,32 @@ if uploaded_file is not None:
                 textfont={"size": 10},
                 colorbar=dict(title="Percentage (%)")
             ))
-            
+           
             fig.update_layout(
                 title='Percentage of Calls Picked Up per Total Calls Made',
                 xaxis_title='Calls Picked Up (Completed)',
                 yaxis_title='Total Calls Made',
                 height=600
             )
-            
+           
             st.plotly_chart(fig, use_container_width=True)
-        
-        else:  # Task Success heatmap
+       
+        else:  # Quality Success heatmap
             # User-level aggregation - ALL calls included
             user_summary = (
                 heatmap_df.groupby('Number')
                 .agg(
                     total_calls=('Number', 'count'),  # All calls
-                    task_true_completed=('Analysis.task_completion', lambda x: (x == True).sum())  # Only True
+                    task_true_completed=('Analysis.call_quality', lambda x: (x == True).sum())  # Only True
                 )
                 .reset_index()
             )
-            
+           
             # Create 10+ bucket for total_calls
             user_summary['total_calls_bucket'] = user_summary['total_calls'].apply(
                 lambda x: "10+" if x >= 10 else str(x)
             )
-            
+           
             # Frequency table
             freq_table = (
                 user_summary
@@ -480,23 +480,23 @@ if uploaded_file is not None:
                 .size()
                 .reset_index(name='user_count')
             )
-            
+           
             # Pivot + percentages
             heatmap_pivot = freq_table.pivot(
                 index='total_calls_bucket',
                 columns='task_true_completed',
                 values='user_count'
             ).fillna(0)
-            
+           
             # Sort index properly
             numeric_indices = [i for i in heatmap_pivot.index if i != "10+"]
             ordered_index = sorted(numeric_indices, key=int)
             if "10+" in heatmap_pivot.index:
                 ordered_index.append("10+")
             heatmap_pivot = heatmap_pivot.loc[ordered_index]
-            
+           
             heatmap_pct = heatmap_pivot.div(heatmap_pivot.sum(axis=1), axis=0) * 100
-            
+           
             # Create mask for impossible cells
             mask = np.zeros_like(heatmap_pct, dtype=bool)
             for i, total_calls in enumerate(heatmap_pct.index):
@@ -504,11 +504,11 @@ if uploaded_file is not None:
                 for j, task_true_calls in enumerate(heatmap_pct.columns):
                     if task_true_calls > max_calls:
                         mask[i, j] = True
-            
+           
             # Apply mask
             heatmap_pct_masked = heatmap_pct.copy()
             heatmap_pct_masked[mask] = np.nan
-            
+           
             # Plot
             fig = go.Figure(data=go.Heatmap(
                 z=heatmap_pct_masked.values,
@@ -520,65 +520,65 @@ if uploaded_file is not None:
                 textfont={"size": 10},
                 colorbar=dict(title="Percentage (%)")
             ))
-            
+           
             fig.update_layout(
-                title='Task Analysis: Task=True vs Call Frequency',
-                xaxis_title='Completed Calls with Task = True',
+                title='Quality Analysis: Quality=True vs Call Frequency',
+                xaxis_title='Completed Calls with Quality = True',
                 yaxis_title='Total Calls Picked',
                 height=600
             )
-            
+           
             st.plotly_chart(fig, use_container_width=True)
-    
+   
     # ==========================================
     # MODULAR TABLE BUILDER
     # ==========================================
     st.markdown("---")
     st.header("🔧 Modular Table Builder")
-    
+   
     st.markdown("""
     Create custom pivot tables by selecting:
     - **Row Variable**: What to group by (rows)
     - **Column Variable**: What to break down by (columns) - optional
     - **Calculated Fields**: Metrics to calculate
     """)
-    
+   
     # Number of tables to create
     num_tables = st.number_input("Number of tables to create", min_value=1, max_value=5, value=3)
-    
+   
     # Available columns for grouping
     categorical_cols = [
-        'Use Case', 'Call Status', 'Analysis.task_completion', 
+        'Use Case', 'Call Status', 'Analysis.call_quality',
         'Analysis.user_sentiment', 'Hour', 'DayOfWeek'
     ]
-    
+   
     # Available calculated fields
     calc_field_options = {
         'Count': lambda x: x.count(),
         'Completed Calls': lambda x: (x == 'completed').sum() if x.name == 'Call Status' else 0,
         'Could Not Connect': lambda x: (x == 'could_not_connect').sum() if x.name == 'Call Status' else 0,
-        'Task Success Count': lambda x: x.fillna(False).sum() if x.name == 'Analysis.task_completion' else 0,
-        'Task Success %': 'custom',  # Handle separately
+        'Quality Success Count': lambda x: x.fillna(False).sum() if x.name == 'Analysis.call_quality' else 0,
+        'Quality Success %': 'custom',  # Handle separately
         'Avg Duration': lambda x: x.mean() if x.name == 'Duration' else 0,
         'Total Duration': lambda x: x.sum() if x.name == 'Duration' else 0,
         'Max Duration': lambda x: x.max() if x.name == 'Duration' else 0,
         'Negative Sentiment Count': lambda x: (x == 'negative').sum() if x.name == 'Analysis.user_sentiment' else 0,
         'Pickup Rate %': 'custom',
     }
-    
+   
     # Create table configurations
     table_configs = []
     for i in range(num_tables):
         with st.expander(f"📊 Table {i+1} Configuration", expanded=(i==0)):
             col1, col2 = st.columns(2)
-            
+           
             with col1:
                 row_var = st.selectbox(
                     "Row Variable",
                     options=categorical_cols,
                     key=f"row_{i}"
                 )
-            
+           
             with col2:
                 use_col_var = st.checkbox("Use Column Variable", key=f"use_col_{i}")
                 if use_col_var:
@@ -589,7 +589,7 @@ if uploaded_file is not None:
                     )
                 else:
                     col_var = None
-            
+           
             # Select metrics
             selected_metrics = st.multiselect(
                 "Select Calculated Fields",
@@ -597,34 +597,34 @@ if uploaded_file is not None:
                 default=['Count', 'Pickup Rate %'],
                 key=f"metrics_{i}"
             )
-            
+           
             table_configs.append({
                 'row_var': row_var,
                 'col_var': col_var,
                 'metrics': selected_metrics
             })
-    
+   
     # Generate tables button
     if st.button("Generate Tables", type="primary"):
         st.markdown("---")
-        
+       
         # Display tables side by side (2 per row)
         for i in range(0, len(table_configs), 2):
             cols = st.columns(2)
-            
+           
             for j, col in enumerate(cols):
                 if i + j < len(table_configs):
                     config = table_configs[i + j]
-                    
+                   
                     with col:
                         st.subheader(f"Table {i+j+1}")
-                        
+                       
                         try:
                             # Build the table based on configuration
                             if config['col_var'] is None:
                                 # Simple groupby
                                 agg_dict = {}
-                                
+                               
                                 for metric in config['metrics']:
                                     if metric == 'Count':
                                         agg_dict['Number'] = 'count'
@@ -632,8 +632,8 @@ if uploaded_file is not None:
                                         agg_dict['Completed'] = ('Call Status', lambda x: (x == 'completed').sum())
                                     elif metric == 'Could Not Connect':
                                         agg_dict['Could Not Connect'] = ('Call Status', lambda x: (x == 'could_not_connect').sum())
-                                    elif metric == 'Task Success Count':
-                                        agg_dict['Task Success'] = ('Analysis.task_completion', lambda x: (x == True).sum())
+                                    elif metric == 'Quality Success Count':
+                                        agg_dict['Quality Success'] = ('Analysis.call_quality', lambda x: (x == True).sum())
                                     elif metric == 'Avg Duration':
                                         agg_dict['Avg Duration (s)'] = ('Duration', 'mean')
                                     elif metric == 'Total Duration':
@@ -642,25 +642,25 @@ if uploaded_file is not None:
                                         agg_dict['Max Duration (s)'] = ('Duration', 'max')
                                     elif metric == 'Negative Sentiment Count':
                                         agg_dict['Negative Sentiment'] = ('Analysis.user_sentiment', lambda x: (x == 'negative').sum())
-                                
+                               
                                 if agg_dict:
                                     result = filtered_df.groupby(config['row_var']).agg(**agg_dict).round(1)
-                                    
+                                   
                                     # Add calculated percentages
                                     if 'Pickup Rate %' in config['metrics'] and 'Completed' in result.columns:
                                         result['Pickup Rate %'] = (
                                             (result['Completed'] / result.get('Number', result['Completed'])) * 100
                                         ).round(1)
-                                    
-                                    if 'Task Success %' in config['metrics'] and 'Task Success' in result.columns and 'Completed' in result.columns:
-                                        result['Task Success %'] = (
-                                            (result['Task Success'] / result['Completed']) * 100
+                                   
+                                    if 'Quality Success %' in config['metrics'] and 'Quality Success' in result.columns and 'Completed' in result.columns:
+                                        result['Quality Success %'] = (
+                                            (result['Quality Success'] / result['Completed']) * 100
                                         ).fillna(0).round(1)
-                                    
+                                   
                                     st.dataframe(result, use_container_width=True)
                                 else:
                                     st.warning("Please select at least one metric")
-                            
+                           
                             else:
                                 # Pivot table
                                 if 'Count' in config['metrics']:
@@ -673,14 +673,14 @@ if uploaded_file is not None:
                                     st.dataframe(result, use_container_width=True)
                                 else:
                                     st.info("Pivot tables currently support Count metric. More coming soon!")
-                        
+                       
                         except Exception as e:
                             st.error(f"Error generating table: {str(e)}")
-    
+   
     # Download filtered data
     st.markdown("---")
     st.subheader("💾 Download Filtered Data")
-    
+   
     col1, col2 = st.columns([3, 1])
     with col1:
         st.info(f"Current filtered dataset contains {len(filtered_df):,} records")
@@ -695,7 +695,7 @@ if uploaded_file is not None:
 
 else:
     st.info("👆 Please upload a CSV file to begin analysis")
-    
+   
     # Show example of expected format
     st.markdown("### Expected CSV Format")
     st.markdown("""
@@ -705,7 +705,6 @@ else:
     - **Use Case**: Use case category
     - **Call Status**: Status (e.g., completed, could_not_connect, call_placed)
     - **Duration**: Call duration in seconds
-    - **Analysis.task_completion**: Task completion status (true, false, -)
+    - **Analysis.call_quality**: Call quality status (true, false, -)
     - And other optional analysis fields...
     """)
-    
